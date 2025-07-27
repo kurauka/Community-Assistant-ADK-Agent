@@ -3,5 +3,4 @@ uvicorn
 python-dotenv
 google-generativeai
 google-cloud-aiplatform
-google-generativeai-toolbox
 google-adk
