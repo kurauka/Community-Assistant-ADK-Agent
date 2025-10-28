@@ -14,199 +14,257 @@ load_dotenv()
 import google.generativeai as genai
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-def generate_recommendations_from_input(user_text: str, goal_or_request: Optional[str] = None) -> dict:
+
+def explain_law_or_regulation(law_name: str, stakeholder: Optional[str] = None, language: str = "en") -> dict:
     """
-    Analyze community data (text or PDF content) and return structured, actionable recommendations in three categories:
-    - Event Ideas & Timing
-    - Social Media Strategy
-    - Ongoing Engagement (Beyond Events)
-    Uses Gemini 2.0 to:
-    - Reference community data, trends, and best practices
-    - Phrase each suggestion as an actionable plan, referencing data and best practices
-    Returns a dict with status and recommendations (organized by category)
+    Explains any Kenyan or international logistics law in plain language (English or Swahili).
+    References official sources: Kenya Law, KRA, NTSA, IMO, INCOTERMS, etc.
+    Returns structured explanation with sections: Summary, Who It Applies To, Key Obligations, Penalties.
     """
-    if not user_text or len(user_text.strip()) < 50:
+    if not law_name or len(law_name.strip()) < 3:
         return {
             "status": "error",
-            "message": "Please provide valid community data (text or PDF content) for recommendations."
+            "message": "Please provide a valid law or regulation name (e.g., 'EACCMA', 'Traffic Act', 'INCOTERMS')."
         }
+
     prompt = (
-        "You are a professional community manager assistant for Google Developer Group organizers. "
-        "Analyze the following community data and generate actionable recommendations in these three categories:"
-        "\n1. Event Ideas & Timing: Suggest event types, formats, and optimal scheduling based on the data. Reference audience demographics, engagement trends, and best practices."
-        "\n2. Social Media Strategy: Provide channel-specific guidance (Twitter/X, Instagram, Facebook, etc.), including post examples, hashtags, and optimal posting times. Reference best practices and analytics if available."
-        "\n3. Ongoing Engagement (Beyond Events): Suggest tactics to keep members active between events (newsletters, online forums, content sharing, etc.), referencing research-backed strategies."
-        "\n\nFor each category, provide 2-4 actionable, data-driven recommendations. Phrase each as a clear plan (e.g., 'do X, focusing on Y'), referencing the community's data and best practices. If possible, cite authoritative tips."
-        f"\n\nCommunity Data:\n{user_text}"
-        f"\n\nOrganizer's goal/request: {goal_or_request if goal_or_request else '[None]'}"
-        "\n\nFormat your answer as a JSON object with keys: 'Event Ideas & Timing', 'Social Media Strategy', 'Ongoing Engagement'. Each key should contain a list of recommendations as strings."
+        "You are a Logistics Legal & Compliance Expert for Kenya and East Africa. "
+        "Explain the following law/regulation in clear, plain language. "
+        "If the user requests Swahili, respond fully in Swahili. "
+        "Structure your answer as JSON with these keys:\n"
+        "  - 'Summary': 2–3 sentence overview\n"
+        "  - 'Applies To': List of stakeholders (e.g., carrier, shipper, broker)\n"
+        "  - 'Key Obligations': 3–5 bullet points of what must be done\n"
+        "  - 'Penalties': Fines, license suspension, or jail time\n"
+        "  - 'Source': Official link or act number\n"
+        "Reference only authoritative sources: Kenya Law, KRA, NTSA, IMO, IATA, INCOTERMS.\n"
+        f"Law/Regulation: {law_name}\n"
+        f"Stakeholder Context: {stakeholder or 'General'}\n"
+        f"Language: {language}\n"
     )
+
     try:
         model = GenerativeModel(model_name="gemini-2.0-flash")
         response = model.generate_content(prompt)
         try:
-            recommendations = json.loads(response.text)
-        except Exception:
-            recommendations = response.text.strip()
+            explanation = json.loads(response.text)
+        except:
+            explanation = {"raw_response": response.text.strip()}
         return {
             "status": "success",
-            "recommendations": recommendations
+            "explanation": explanation
         }
     except Exception as e:
         return {
             "status": "error",
-            "message": f"Unable to generate recommendations due to an internal error: {str(e)}"
+            "message": f"Failed to explain law: {str(e)}"
         }
 
 
-def generate_partnership_pitch(user_text: str, goal_or_request: Optional[str] = None) -> dict:
+def generate_legal_document(doc_type: str, shipment_data: Dict, language: str = "en") -> dict:
     """
-    Generate a personalized partnership/sponsorship pitch using community data (text, Google Word, or PDF content).
-    The pitch includes:
-    - Community Overview (size, demographics, growth)
-    - Engagement Metrics (attendance, referrals, trends)
-    - Impact Statements (summarized reach and influence)
-    - Value Proposition (ROI for sponsors)
-    - Next Steps (partnership ideas)
-    Uses Gemini 2.0 to:
-    - Reference and summarize data from the provided content
-    - Phrase each section as a compelling, data-driven pitch
-    Returns a dict with status and the pitch (organized by section)
+    Generates editable legal logistics documents (Bill of Lading, Customs Declaration, etc.)
+    Uses structured shipment data to auto-fill templates.
+    Returns downloadable JSON + PDF-ready structure.
     """
-    if not user_text or len(user_text.strip()) < 50:
+    valid_docs = [
+        "Bill of Lading", "Airway Bill", "Commercial Invoice", "Packing List",
+        "Certificate of Origin", "Customs Declaration", "Insurance Certificate",
+        "Road Consignment Note", "Proof of Delivery"
+    ]
+
+    if doc_type not in valid_docs:
         return {
             "status": "error",
-            "message": "Please provide valid community data (text or report content) for pitch generation."
+            "message": f"Invalid document type. Choose from: {', '.join(valid_docs)}"
         }
+
+    if not shipment_data or len(shipment_data) < 3:
+        return {
+            "status": "error",
+            "message": "Provide shipment_data as JSON with at least: shipper, consignee, goods, origin, destination."
+        }
+
     prompt = (
-        "You are an expert community partnership manager. Using the following community data, generate a personalized pitch for potential sponsors. "
-        "Structure the pitch in these sections:"
-        "\n1. Community Overview: Highlight size, demographics, and growth (e.g., '250 members, 40% YOY growth')."
-        "\n2. Engagement Metrics: Use data to show trends (e.g., 'Attendance by event', 'Social referrals by month')."
-        "\n3. Impact Statements: Summarize reach and influence (e.g., 'Our events have reached 5,000 attendees over 5 years')."
-        "\n4. Value Proposition: Use metrics like conversion rates or referrals to demonstrate ROI for sponsors. Reference best practices (see fastercapital.com)."
-        "\n5. Next Steps: Suggest partnership ideas (e.g., sponsor logos on materials, co-hosted events, etc.)."
-        "\n\nFor each section, use data from the report/text and phrase it as a compelling, actionable pitch."
-        f"\n\nCommunity Data:\n{user_text}"
-        f"\n\nOrganizer's goal/request: {goal_or_request if goal_or_request else '[None]'}"
-        "\n\nFormat your answer as a JSON object with keys: 'Community Overview', 'Engagement Metrics', 'Impact Statements', 'Value Proposition', 'Next Steps'. Each key should contain a string or bullet points."
+        "You are a Logistics Document Automation Expert. Generate a complete, legally compliant "
+        f"{doc_type} using the provided shipment data. Output as JSON with fields ready for PDF rendering. "
+        "Use standard international formats (e.g., IMO for BOL, IATA for Airway Bill). "
+        "Include all required fields, clauses, and disclaimers. "
+        "If language is 'sw', translate all labels and text to Swahili.\n"
+        f"Document Type: {doc_type}\n"
+        f"Shipment Data: {json.dumps(shipment_data, indent=2)}\n"
+        f"Language: {language}\n"
+        "Return JSON with keys: 'metadata', 'sections' (list of field groups), 'disclaimers', 'signature_lines'."
     )
+
     try:
         model = GenerativeModel(model_name="gemini-2.0-flash")
         response = model.generate_content(prompt)
         try:
-            pitch = json.loads(response.text)
-        except Exception:
-            pitch = response.text.strip()
+            doc = json.loads(response.text)
+        except:
+            doc = {"raw_response": response.text.strip()}
         return {
             "status": "success",
-            "pitch": pitch
-        }
-    except Exception as e:
-        return {
-            "status": "error",
-            "message": f"Unable to generate partnership pitch due to an internal error: {str(e)}"
-        }
-
-
-def answer_community_general_question(question: str) -> dict:
-    """
-    Answers general questions about community building, being a tech community organizer, creating and measuring impact, and troubleshooting Bevy platform issues.
-    - Uses Gemini to answer based on best practices, referenced resources, and Bevy support documentation.
-    - If the question is about Bevy, the tool will search https://help.bevy.com/hc/en-us/categories/22880458639767-Community-Enterprise-Pro for relevant answers.
-    - For general community questions, it draws on:
-        - https://bevy.com/b/blog
-        - https://fastercapital.com/topics/measuring-and-analyzing-community-growth-and-impact.html
-        - https://davidspinks.substack.com/
-    Returns a dict with the question and a detailed answer.
-    """
-    try:
-        model = GenerativeModel(model_name="gemini-2.0-flash")
-        prompt = f"""
-You are a professional tech community organizer assistant for Google Developer Group organizers. Answer the following question in detail, referencing best practices and, if relevant, troubleshooting steps for the Bevy platform.
-
-If the question is about the Bevy platform, search the Bevy support site (https://help.bevy.com/hc/en-us/categories/22880458639767-Community-Enterprise-Pro) and summarize the most relevant answer. For other questions, use insights from:
-- https://bevy.com/b/blog
-- https://fastercapital.com/topics/measuring-and-analyzing-community-growth-and-impact.html
-- https://davidspinks.substack.com/
-- https://www.cmxhub.com/reports
-
-Be clear, actionable, and cite authoritative tips or resources where possible.
-
-Question:
-{question}
-"""
-        response = model.generate_content(prompt)
-        return {
-            "status": "success",
-            "report": {
-                "question": question,
-                "answer": response.text
+            "document": {
+                "type": doc_type,
+                "language": language,
+                "generated_at": datetime.datetime.now(ZoneInfo("Africa/Nairobi")).isoformat(),
+                "content": doc
             }
         }
     except Exception as e:
         return {
             "status": "error",
-            "error_message": f"Unable to answer general question: {str(e)}"
+            "message": f"Document generation failed: {str(e)}"
         }
 
 
+def check_compliance(shipment_data: Dict, route: str, cargo_type: str) -> dict:
+    """
+    Runs compliance check on shipment against, route, and cargo type.
+    Flags missing documents, licenses, or violations.
+    References KRA, KEBS, NTSA, NEMA, EACCMA.
+    """
+    required_fields = ["shipper", "consignee", "goods", "origin", "destination", "transport_mode"]
+    if not all(k in shipment_data for k in required_fields):
+        return {
+            "status": "error",
+            "message": f"Missing required fields: {set(required_fields) - set(shipment_data.keys())}"
+        }
+
+    prompt = (
+        "You are a Logistics Compliance Checker for Kenya and EAC. "
+        "Review the shipment and flag any missing documents, licenses, or legal violations. "
+        "Output JSON with:\n"
+        "  - 'overall_status': 'PASS' or 'FAIL'\n"
+        "  - 'required_documents': list with status (missing/present)\n"
+        "  - 'alerts': list of issues (e.g., 'No KEBS certificate for electronics')\n"
+        "  - 'next_steps': 2–3 actions to fix\n"
+        "Reference: EACCMA, KRA, KEBS, NTSA, NEMA, IMO, IATA.\n"
+        f"Route: {route}\n"
+        f"Cargo Type: {cargo_type}\n"
+        f"Shipment Data: {json.dumps(shipment_data, indent=2)}\n"
+    )
+
+    try:
+        model = GenerativeModel(model_name="gemini-2.0-flash")
+        response = model.generate_content(prompt)
+        try:
+            result = json.loads(response.text)
+        except:
+            result = {"raw_response": response.text.strip()}
+        return {
+            "status": "success",
+            "compliance_report": result
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Compliance check failed: {str(e)}"
+        }
+
+
+def stakeholder_guidance(stakeholder: str, query: str) -> dict:
+    """
+    Provides role-specific legal guidance for any logistics stakeholder.
+    E.g., 'What are a freight forwarder’s liabilities under Kenyan law?'
+    """
+    valid_stakeholders = [
+        "Shipper", "Consignee", "Carrier", "Driver", "Freight Forwarder",
+        "Customs Broker", "Warehouse Operator", "Insurer", "Regulator"
+    ]
+
+    if stakeholder not in valid_stakeholders:
+        return {
+            "status": "error",
+            "message": f"Invalid stakeholder. Choose from: {', '.join(valid_stakeholders)}"
+        }
+
+    prompt = (
+        "You are a Logistics Legal Advisor for East Africa. Answer the stakeholder's question "
+        "with clear, actionable guidance based on Kenyan and international law. "
+        "Structure as JSON:\n"
+        "  - 'role': stakeholder\n"
+        "  - 'answer': detailed response (3–5 paragraphs)\n"
+        "  - 'key_laws': list of 2–3 relevant acts\n"
+        "  - 'best_practice': 1 actionable tip\n"
+        "Cite sources: Kenya Law, KRA, NTSA, IMO, INCOTERMS.\n"
+        f"Stakeholder: {stakeholder}\n"
+        f"Question: {query}\n"
+    )
+
+    try:
+        model = GenerativeModel(model_name="gemini-2.0-flash")
+        response = model.generate_content(prompt)
+        try:
+            guidance = json.loads(response.text)
+        except:
+            guidance = {"answer": response.text.strip()}
+        return {
+            "status": "success",
+            "guidance": guidance
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Guidance failed: {str(e)}"
+        }
+
+
+# —————————————————————————————————————————————————————————————
+# ROOT AGENT: LOGISTICS LEGAL & COMPLIANCE INTELLIGENCE ASSISTANT
+# —————————————————————————————————————————————————————————————
+
 root_agent = Agent(
-    name="obi_kaya_agent",
+    name="logistics_legal_agent",
     model="gemini-2.0-flash-exp",
     description=(
-        "Smart Community Assistant Agent: Empowers Google Developer Group (GDG) organizers, especially in Sub-Saharan Africa, "
-        "to maximize their community's impact, secure partnerships, and sustain engagement. The agent analyzes community data, "
-        "generates actionable recommendations, crafts partnership/sponsorship pitches, and provides strategies for ongoing engagement. "
-        "It is designed to help organizers document and communicate impact, automate partnership materials, and maintain vibrant, "
-        "inclusive communities. The agent is multilingual and can respond in most African languages."
+        "⚖️ Logistics Legal & Compliance Intelligence Assistant — The AI-powered legal co-pilot for the entire logistics ecosystem in Kenya and East Africa. "
+        "Explains laws, generates documents (BOL, Customs Declaration), checks compliance, and advises all stakeholders: shippers, carriers, forwarders, brokers, and regulators. "
+        "Integrates with Kenya Law, KRA, NTSA, KEBS, and international standards (IMO, IATA, INCOTERMS). "
+        "Supports English and Swahili. Ideal for freight forwarders, customs brokers, and logistics startups."
     ),
     instruction="""
-You are the Smart Community Assistant Agent for GDG organizers. Your core responsibilities are:
+You are the **Logistics Legal & Compliance Intelligence Assistant** for Kenya and the East African Community.
 
-1. Impact Communication & Storytelling:
-   - Analyze community data and reports to extract key metrics (growth, engagement, demographics).
-   - Generate compelling impact stories and summaries using numbers, testimonials, and trends.
-   - Help organizers document and communicate their community's value to sponsors, members, and the public.
+### YOUR CORE CAPABILITIES:
+1. **Legal Explainer**  
+   - Explain any logistics law (e.g., EACCMA, Traffic Act, Merchant Shipping Act) in plain English or Swahili.  
+   - Cite official sources: Kenya Law, KRA, NTSA, IMO, IATA.
 
-2. Partnership & Sponsorship Strategy:
-   - Create personalized, data-driven partnership/sponsorship pitches and decks.
-   - Summarize community strengths, engagement, and ROI for potential partners.
-   - Suggest partnership ideas (e.g., co-hosted events, sponsor branding, exclusive content).
-   - Automate and customize materials for different organizations.
+2. **Document Generator**  
+   - Auto-fill Bills of Lading, Customs Declarations, Commercial Invoices, Certificates of Origin, etc.  
+   - Output JSON ready for PDF rendering.
 
-3. Engagement & Event Strategy:
-   - Recommend event ideas, formats, and optimal timing based on community demographics and past engagement.
-   - Suggest ways to keep members engaged between events (newsletters, online forums, content sharing, etc.).
-   - Advise on balancing content for diverse developer interests (e.g., AI/ML, Flutter, Angular).
-   - Provide actionable plans for both virtual and in-person events, considering local context.
+3. **Compliance Checker**  
+   - Scan shipments and flag missing docs, licenses, or violations.  
+   - Cover KRA, KEBS, NEMA, NTSA, and EAC rules.
 
-4. Social Media & Communication:
-   - Develop channel-specific social media strategies (Twitter/X, Instagram, Facebook, WhatsApp, etc.).
-   - Draft posts, suggest hashtags, and recommend optimal posting times for each platform.
-   - Ensure content is consistent, high-quality, and tailored to each channel's audience and format.
-   - Advise on campaign planning and content calendars.
+4. **Stakeholder Advisor**  
+   - Guide shippers, carriers, forwarders, brokers, drivers, warehouse operators.  
+   - Clarify rights, obligations, and liabilities.
 
-5. Multilingual & Inclusive Support:
-   - Respond in most African languages as needed, ensuring accessibility for all GDG organizers in SSA.
-   - Adapt tone and examples to local context and culture.
+5. **Multilingual Support**  
+   - Respond in **English** or **Swahili** based on user preference.
 
-You must only answer questions or perform actions related to:
-- Community impact measurement, documentation, and storytelling
-- Partnership/sponsorship pitch generation and strategy
-- Event and engagement strategy for developer communities
-- Social media and communication planning for community growth
-- Multilingual support for African GDG organizers
+### YOU MUST ONLY RESPOND TO:
+- Questions about logistics laws, regulations, or compliance
+- Requests to generate or explain legal documents
+- Compliance checks for shipments
+- Stakeholder rights and obligations
+- Document templates or automation
 
-If a user asks about anything outside these topics, politely respond:
-"Sorry, I am here to support you with Community Impact, Partnerships, Engagement, and Communication Strategies for your developer community. Please ask about those topics."
+If the user asks about anything else (e.g., marketing, HR, general AI), respond:
+> "Sorry, I'm specialized in **logistics law, compliance, and document automation** in Kenya and East Africa. Please ask about laws, documents, or compliance."
 
-Always provide clear, actionable, and context-aware guidance. Use any uploaded reports, data, or user input to tailor your responses. If a user requests a response in a specific African language, do your best to accommodate.
+Always be **accurate**, **actionable**, and **source-backed**. Use tools to generate structured outputs.
 """,
     tools=[
-        generate_recommendations_from_input,
-        generate_partnership_pitch,
-        answer_community_general_question,
-        # Add future tools here (e.g., impact_story_generation, engagement_calendar, etc.)
+        explain_law_or_regulation,
+        generate_legal_document,
+        check_compliance,
+        stakeholder_guidance,
+        # Future: regulatory_update_feed, case_law_search, contract_drafter
     ],
 )
